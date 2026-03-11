@@ -5,32 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AR Jewelry Try-On</title>
 
-<!-- React CDN -->
-<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-
-<!-- Babel for JSX -->
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
 <style>
 body{
 margin:0;
 overflow:hidden;
-background:#000;
+background:black;
 font-family:sans-serif;
+color:white;
 }
 
-button{
-cursor:pointer;
-border:none;
-}
-
-#root{
-width:100vw;
-height:100vh;
-}
-
-.menu{
+#menu{
 position:absolute;
 bottom:30px;
 right:30px;
@@ -39,85 +23,93 @@ flex-direction:column;
 gap:10px;
 }
 
-.btn{
+button{
 background:rgba(255,255,255,0.2);
-backdrop-filter:blur(10px);
+border:none;
 color:white;
-padding:12px 20px;
+padding:12px 18px;
 border-radius:20px;
-font-weight:600;
+font-weight:bold;
+cursor:pointer;
 }
 
-.upload{
-position:absolute;
-top:20px;
-right:20px;
-}
-
-.status{
+#status{
 position:absolute;
 bottom:30px;
 left:30px;
 background:rgba(0,0,0,0.4);
-padding:8px 14px;
+padding:8px 16px;
 border-radius:20px;
-color:#fff;
 font-size:12px;
-letter-spacing:1px;
 }
 
-.loading{
+#loading{
 position:fixed;
 inset:0;
 display:flex;
 align-items:center;
 justify-content:center;
 background:#0f172a;
-color:white;
 font-size:18px;
 }
 </style>
-</head>
 
+</head>
 <body>
 
-<div id="root"></div>
+<div id="loading">Loading AR Engine...</div>
 
-<script type="text/babel">
+<video id="video" playsinline muted style="display:none"></video>
+<canvas id="canvas"></canvas>
 
-const {useRef,useState,useEffect}=React;
+<div id="menu">
+<button onclick="setType('necklace')">Necklace</button>
+<button onclick="setType('earrings')">Earrings</button>
+<button onclick="setType('ring')">Ring</button>
+</div>
 
-function App(){
+<div id="status">necklace Try-On</div>
 
-const videoRef=useRef(null);
-const canvasRef=useRef(null);
-const jewelryImg=useRef(null);
+<script type="module">
 
-const [face,setFace]=useState(null);
-const [hand,setHand]=useState(null);
+import {
+FaceLandmarker,
+HandLandmarker,
+FilesetResolver
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
 
-const [type,setType]=useState("necklace");
-const [upload,setUpload]=useState(null);
-const [loading,setLoading]=useState(true);
+const video=document.getElementById("video");
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+
+let faceLandmarker;
+let handLandmarker;
+
+let type="necklace";
 
 const assets={
-necklace:"https://hebbkx1anhila5yf.public.blob.vercel-storage.com/necless-removebg-preview-eKz2jodGH8N7T3A6C0R7P8ArJP6J6b.png",
+necklace:"https://img.icons8.com/color/512/necklace.png",
 earrings:"https://img.icons8.com/color/512/earrings.png",
 ring:"https://img.icons8.com/color/512/diamond-ring.png"
 };
 
-useEffect(()=>{
+const jewelry=new Image();
+jewelry.crossOrigin="anonymous";
+jewelry.src=assets[type];
 
-async function load(){
+window.setType=(t)=>{
+type=t;
+document.getElementById("status").innerText=t+" Try-On";
+jewelry.src=assets[t];
+};
 
-const {FaceLandmarker,HandLandmarker,FilesetResolver}
-=await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/+esm");
+async function init(){
 
 const vision=await FilesetResolver.forVisionTasks(
 "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
 );
 
-const faceLM=await FaceLandmarker.createFromOptions(vision,{
+faceLandmarker=await FaceLandmarker.createFromOptions(vision,{
 baseOptions:{
 modelAssetPath:
 "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
@@ -127,7 +119,7 @@ runningMode:"VIDEO",
 numFaces:1
 });
 
-const handLM=await HandLandmarker.createFromOptions(vision,{
+handLandmarker=await HandLandmarker.createFromOptions(vision,{
 baseOptions:{
 modelAssetPath:
 "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
@@ -137,45 +129,25 @@ runningMode:"VIDEO",
 numHands:2
 });
 
-setFace(faceLM);
-setHand(handLM);
-setLoading(false);
+document.getElementById("loading").style.display="none";
+
+startCamera();
+render();
+
 }
 
-load();
+async function startCamera(){
 
-},[]);
-
-useEffect(()=>{
-
-navigator.mediaDevices.getUserMedia({
+const stream=await navigator.mediaDevices.getUserMedia({
 video:{facingMode:"user",width:1280,height:720}
-}).then(stream=>{
-videoRef.current.srcObject=stream;
-videoRef.current.play();
 });
 
-},[]);
+video.srcObject=stream;
+await video.play();
 
-useEffect(()=>{
+}
 
-const img=new Image();
-img.crossOrigin="anonymous";
-img.src=upload || assets[type];
-img.onload=()=>{jewelryImg.current=img};
-
-},[type,upload]);
-
-useEffect(()=>{
-
-if(!face||!hand)return;
-
-const canvas=canvasRef.current;
-const ctx=canvas.getContext("2d");
-
-function loop(){
-
-const video=videoRef.current;
+function render(){
 
 canvas.width=window.innerWidth;
 canvas.height=window.innerHeight;
@@ -186,13 +158,9 @@ ctx.scale(-1,1);
 ctx.drawImage(video,0,0,canvas.width,canvas.height);
 ctx.restore();
 
-const img=jewelryImg.current;
-
-if(img){
-
 if(type==="ring"){
 
-const result=hand.detectForVideo(video,performance.now());
+const result=handLandmarker.detectForVideo(video,performance.now());
 
 if(result.landmarks){
 
@@ -201,7 +169,7 @@ result.landmarks.forEach(lm=>{
 const x=canvas.width*(1-lm[13].x);
 const y=canvas.height*lm[13].y;
 
-ctx.drawImage(img,x-40,y-40,80,80);
+ctx.drawImage(jewelry,x-40,y-40,80,80);
 
 });
 
@@ -209,7 +177,7 @@ ctx.drawImage(img,x-40,y-40,80,80);
 
 }else{
 
-const result=face.detectForVideo(video,performance.now());
+const result=faceLandmarker.detectForVideo(video,performance.now());
 
 if(result.faceLandmarks){
 
@@ -220,7 +188,7 @@ if(type==="necklace"){
 const x=canvas.width*(1-lms[152].x);
 const y=canvas.height*lms[152].y;
 
-ctx.drawImage(img,x-120,y,240,120);
+ctx.drawImage(jewelry,x-120,y,240,120);
 
 }
 
@@ -232,8 +200,8 @@ const ly=canvas.height*lms[361].y;
 const rx=canvas.width*(1-lms[132].x);
 const ry=canvas.height*lms[132].y;
 
-ctx.drawImage(img,lx-30,ly,60,60);
-ctx.drawImage(img,rx-30,ry,60,60);
+ctx.drawImage(jewelry,lx-30,ly,60,60);
+ctx.drawImage(jewelry,rx-30,ry,60,60);
 
 }
 
@@ -241,70 +209,11 @@ ctx.drawImage(img,rx-30,ry,60,60);
 
 }
 
-}
-
-requestAnimationFrame(loop);
+requestAnimationFrame(render);
 
 }
 
-loop();
-
-},[face,hand,type]);
-
-function uploadFile(e){
-
-const f=e.target.files[0];
-if(f)setUpload(URL.createObjectURL(f));
-
-}
-
-if(loading){
-
-return <div className="loading">Loading AR Engine...</div>
-
-}
-
-return(
-
-<div>
-
-<video ref={videoRef} style={{display:"none"}} playsInline muted></video>
-
-<canvas ref={canvasRef}></canvas>
-
-<div className="upload">
-
-<input type="file" accept="image/png" onChange={uploadFile}/>
-
-</div>
-
-<div className="menu">
-
-<button className="btn" onClick={()=>setType("necklace")}>
-Necklace
-</button>
-
-<button className="btn" onClick={()=>setType("earrings")}>
-Earrings
-</button>
-
-<button className="btn" onClick={()=>setType("ring")}>
-Ring
-</button>
-
-</div>
-
-<div className="status">
-{type} Try-On
-</div>
-
-</div>
-
-)
-
-}
-
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>)
+init();
 
 </script>
 
