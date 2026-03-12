@@ -1,221 +1,330 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AR Jewelry Try-On</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Jewelry Try-On</title>
+    <style>
+        :root {
+            --accent: #facc15;
+            --glass: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
+        }
 
-<style>
-body{
-margin:0;
-overflow:hidden;
-background:black;
-font-family:sans-serif;
-color:white;
-}
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: white;
+        }
 
-#menu{
-position:absolute;
-bottom:30px;
-right:30px;
-display:flex;
-flex-direction:column;
-gap:10px;
-}
+        #canvas {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
 
-button{
-background:rgba(255,255,255,0.2);
-border:none;
-color:white;
-padding:12px 18px;
-border-radius:20px;
-font-weight:bold;
-cursor:pointer;
-}
+        /* UI Overlays */
+        .ui-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
 
-#status{
-position:absolute;
-bottom:30px;
-left:30px;
-background:rgba(0,0,0,0.4);
-padding:8px 16px;
-border-radius:20px;
-font-size:12px;
-}
+        .interactive {
+            pointer-events: auto;
+        }
 
-#loading{
-position:fixed;
-inset:0;
-display:flex;
-align-items:center;
-justify-content:center;
-background:#0f172a;
-font-size:18px;
-}
-</style>
+        /* Glassmorphism Styles */
+        .glass-btn {
+            background: var(--glass);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            color: #fff;
+            padding: 12px 24px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.2s;
+        }
 
+        .glass-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .glass-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Layout */
+        .top-right {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 12px;
+        }
+
+        .bottom-right {
+            position: absolute;
+            bottom: 32px;
+            right: 32px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .menu-items {
+            display: none;
+            margin-bottom: 16px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(20px);
+            border-radius: 28px;
+            padding: 10px;
+            flex-direction: column;
+            gap: 8px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .menu-items.active {
+            display: flex;
+        }
+
+        .main-toggle {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        /* Loading Screen */
+        #loader {
+            position: fixed;
+            inset: 0;
+            background: #0f172a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(250, 204, 21, 0.2);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden { display: none !important; }
+    </style>
 </head>
 <body>
 
-<div id="loading">Loading AR Engine...</div>
+    <div id="loader">
+        <div class="spinner"></div>
+        <p style="margin-top: 20px; letter-spacing: 2px; font-size: 12px; text-transform: uppercase;">Loading AR Experience</p>
+    </div>
 
-<video id="video" playsinline muted style="display:none"></video>
-<canvas id="canvas"></canvas>
+    <video id="video" playsinline muted style="display:none"></video>
+    <canvas id="canvas"></canvas>
 
-<div id="menu">
-<button onclick="setType('necklace')">Necklace</button>
-<button onclick="setType('earrings')">Earrings</button>
-<button onclick="setType('ring')">Ring</button>
-</div>
+    <div class="ui-layer">
+        <!-- Top controls -->
+        <div class="top-right interactive">
+            <label class="glass-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>Upload PNG</span>
+                <input type="file" id="fileInput" accept="image/png" style="display: none;">
+            </label>
+            <button id="resetBtn" class="glass-btn hidden" style="background: rgba(239, 68, 68, 0.4); border-radius: 50%; width: 44px; padding: 0; justify-content: center;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            </button>
+        </div>
 
-<div id="status">necklace Try-On</div>
+        <!-- Bottom Menu -->
+        <div class="bottom-right interactive">
+            <div id="menuItems" class="menu-items">
+                <button class="glass-btn type-select" data-type="ring">Ring</button>
+                <button class="glass-btn type-select" data-type="earrings">Earrings</button>
+                <button class="glass-btn type-select" data-type="necklace">Necklace</button>
+            </div>
+            <button id="menuToggle" class="main-toggle">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="18 15 12 9 6 15"/></svg>
+            </button>
+        </div>
+    </div>
 
-<script type="module">
+    <script type="module">
+        import { FaceLandmarker, HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
 
-import {
-FaceLandmarker,
-HandLandmarker,
-FilesetResolver
-} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const loader = document.getElementById('loader');
+        
+        let faceLandmarker, handLandmarker;
+        let currentType = 'necklace';
+        let customImage = null;
+        const assets = {
+            necklace: 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/necless-removebg-preview-eKz2jodGH8N7T3A6C0R7P8ArJP6J6b.png',
+            earrings: 'https://img.icons8.com/color/512/earrings.png',
+            ring: 'https://img.icons8.com/color/512/diamond-ring.png'
+        };
 
-const video=document.getElementById("video");
-const canvas=document.getElementById("canvas");
-const ctx=canvas.getContext("2d");
+        let jewelryImg = new Image();
+        jewelryImg.crossOrigin = "anonymous";
+        jewelryImg.src = assets.necklace;
 
-let faceLandmarker;
-let handLandmarker;
+        async function init() {
+            try {
+                const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm");
+                
+                faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+                    baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task", delegate: "GPU" },
+                    runningMode: "VIDEO"
+                });
 
-let type="necklace";
+                handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                    baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task", delegate: "GPU" },
+                    runningMode: "VIDEO"
+                });
 
-const assets={
-necklace:"https://img.icons8.com/color/512/necklace.png",
-earrings:"https://img.icons8.com/color/512/earrings.png",
-ring:"https://img.icons8.com/color/512/diamond-ring.png"
-};
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    video.play();
+                    loader.classList.add('hidden');
+                    render();
+                };
+            } catch (err) {
+                console.error(err);
+                alert("Please ensure you are using HTTPS and have allowed camera access.");
+            }
+        }
 
-const jewelry=new Image();
-jewelry.crossOrigin="anonymous";
-jewelry.src=assets[type];
+        function render() {
+            if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
 
-window.setType=(t)=>{
-type=t;
-document.getElementById("status").innerText=t+" Try-On";
-jewelry.src=assets[t];
-};
+            const vW = video.videoWidth;
+            const vH = video.videoHeight;
+            const vRatio = vW / vH;
+            const cRatio = canvas.width / canvas.height;
 
-async function init(){
+            let dW, dH, dX, dY;
+            if (vRatio > cRatio) {
+                dH = canvas.height; dW = canvas.height * vRatio;
+                dX = (canvas.width - dW) / 2; dY = 0;
+            } else {
+                dW = canvas.width; dH = canvas.width / vRatio;
+                dX = 0; dY = (canvas.height - dH) / 2;
+            }
 
-const vision=await FilesetResolver.forVisionTasks(
-"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
-);
+            // Draw Mirror Video
+            ctx.save();
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, dX, dY, dW, dH);
+            ctx.restore();
 
-faceLandmarker=await FaceLandmarker.createFromOptions(vision,{
-baseOptions:{
-modelAssetPath:
-"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-delegate:"GPU"
-},
-runningMode:"VIDEO",
-numFaces:1
-});
+            const now = Date.now();
+            const mapX = (nx) => (1 - nx) * dW + dX;
+            const mapY = (ny) => ny * dH + dY;
 
-handLandmarker=await HandLandmarker.createFromOptions(vision,{
-baseOptions:{
-modelAssetPath:
-"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-delegate:"GPU"
-},
-runningMode:"VIDEO",
-numHands:2
-});
+            if (jewelryImg.complete) {
+                if (currentType === 'ring') {
+                    const results = handLandmarker.detectForVideo(video, now);
+                    results.landmarks?.forEach(pts => {
+                        const mcp = pts[13], pip = pts[14];
+                        const mX = mapX(mcp.x), mY = mapY(mcp.y), pX = mapX(pip.x), pY = mapY(pip.y);
+                        const cX = (mX + pX) / 2, cY = (mY + pY) / 2;
+                        const dist = Math.sqrt(Math.pow(mX-pX,2) + Math.pow(mY-pY,2));
+                        const angle = Math.atan2(pY - mY, pX - mX);
+                        
+                        ctx.save();
+                        ctx.translate(cX, cY);
+                        ctx.rotate(angle + Math.PI/2);
+                        ctx.drawImage(jewelryImg, -dist/2, -dist/2, dist, dist * (jewelryImg.height/jewelryImg.width));
+                        ctx.restore();
+                    });
+                } else {
+                    const results = faceLandmarker.detectForVideo(video, now);
+                    if (results.faceLandmarks?.[0]) {
+                        const lms = results.faceLandmarks[0];
+                        if (currentType === 'necklace') {
+                            const jawL = lms[172], jawR = lms[397], chin = lms[152];
+                            const w = Math.abs(mapX(jawL.x) - mapX(jawR.x)) * 1.8;
+                            const h = (jewelryImg.height/jewelryImg.width) * w;
+                            ctx.drawImage(jewelryImg, (mapX(jawL.x)+mapX(jawR.x))/2 - w/2, mapY(chin.y) - h*0.1, w, h);
+                        } else if (currentType === 'earrings') {
+                            const lE = lms[361], rE = lms[132], head = lms[10], chin = lms[152];
+                            const sz = Math.abs(mapY(head.y) - mapY(chin.y)) * 0.15;
+                            const h = (jewelryImg.height/jewelryImg.width) * sz;
+                            ctx.drawImage(jewelryImg, mapX(lE.x) - sz/2, mapY(lE.y), sz, h);
+                            ctx.drawImage(jewelryImg, mapX(rE.x) - sz/2, mapY(rE.y), sz, h);
+                        }
+                    }
+                }
+            }
 
-document.getElementById("loading").style.display="none";
+            requestAnimationFrame(render);
+        }
 
-startCamera();
-render();
+        // UI Listeners
+        document.getElementById('menuToggle').onclick = () => document.getElementById('menuItems').classList.toggle('active');
+        
+        document.querySelectorAll('.type-select').forEach(btn => {
+            btn.onclick = () => {
+                currentType = btn.dataset.type;
+                if (!customImage) jewelryImg.src = assets[currentType];
+                document.getElementById('menuItems').classList.remove('active');
+            };
+        });
 
-}
+        document.getElementById('fileInput').onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                customImage = URL.createObjectURL(file);
+                jewelryImg.src = customImage;
+                document.getElementById('resetBtn').classList.remove('hidden');
+            }
+        };
 
-async function startCamera(){
+        document.getElementById('resetBtn').onclick = () => {
+            customImage = null;
+            jewelryImg.src = assets[currentType];
+            document.getElementById('resetBtn').classList.add('hidden');
+        };
 
-const stream=await navigator.mediaDevices.getUserMedia({
-video:{facingMode:"user",width:1280,height:720}
-});
-
-video.srcObject=stream;
-await video.play();
-
-}
-
-function render(){
-
-canvas.width=window.innerWidth;
-canvas.height=window.innerHeight;
-
-ctx.save();
-ctx.translate(canvas.width,0);
-ctx.scale(-1,1);
-ctx.drawImage(video,0,0,canvas.width,canvas.height);
-ctx.restore();
-
-if(type==="ring"){
-
-const result=handLandmarker.detectForVideo(video,performance.now());
-
-if(result.landmarks){
-
-result.landmarks.forEach(lm=>{
-
-const x=canvas.width*(1-lm[13].x);
-const y=canvas.height*lm[13].y;
-
-ctx.drawImage(jewelry,x-40,y-40,80,80);
-
-});
-
-}
-
-}else{
-
-const result=faceLandmarker.detectForVideo(video,performance.now());
-
-if(result.faceLandmarks){
-
-const lms=result.faceLandmarks[0];
-
-if(type==="necklace"){
-
-const x=canvas.width*(1-lms[152].x);
-const y=canvas.height*lms[152].y;
-
-ctx.drawImage(jewelry,x-120,y,240,120);
-
-}
-
-if(type==="earrings"){
-
-const lx=canvas.width*(1-lms[361].x);
-const ly=canvas.height*lms[361].y;
-
-const rx=canvas.width*(1-lms[132].x);
-const ry=canvas.height*lms[132].y;
-
-ctx.drawImage(jewelry,lx-30,ly,60,60);
-ctx.drawImage(jewelry,rx-30,ry,60,60);
-
-}
-
-}
-
-}
-
-requestAnimationFrame(render);
-
-}
-
-init();
-
-</script>
-
+        window.onload = init;
+    </script>
 </body>
 </html>
