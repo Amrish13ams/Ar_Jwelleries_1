@@ -267,9 +267,8 @@
                         const mX = mapX(mcp.x), mY = mapY(mcp.y), pX = mapX(pip.x), pY = mapY(pip.y);
                         const cX = (mX + pX) / 2, cY = (mY + pY) / 2;
                         
-                        // Calculate base distance and apply a scale factor to reduce overall size
                         const baseDist = Math.sqrt(Math.pow(mX-pX,2) + Math.pow(mY-pY,2));
-                        const ringWidth = baseDist * 0.55; // Reduced further from 0.75 to 0.55
+                        const ringWidth = baseDist * 0.55; 
                         const ringHeight = ringWidth * (jewelryImg.height/jewelryImg.width);
                         const angle = Math.atan2(pY - mY, pX - mX);
                         
@@ -292,8 +291,20 @@
                             const lE = lms[361], rE = lms[132], head = lms[10], chin = lms[152];
                             const sz = Math.abs(mapY(head.y) - mapY(chin.y)) * 0.15;
                             const h = (jewelryImg.height/jewelryImg.width) * sz;
-                            ctx.drawImage(jewelryImg, mapX(lE.x) - sz/2, mapY(lE.y), sz, h);
-                            ctx.drawImage(jewelryImg, mapX(rE.x) - sz/2, mapY(rE.y), sz, h);
+                            
+                            // Visibility check based on Z-depth (depth relative to face center)
+                            // MediaPipe Z values: more positive is further back.
+                            const depthDiff = lE.z - rE.z;
+                            const hideThreshold = 0.035; // Sensitivity for hiding occluded ear
+
+                            // Draw Left Earring only if not hidden behind the head
+                            if (depthDiff < hideThreshold) {
+                                ctx.drawImage(jewelryImg, mapX(lE.x) - sz/2, mapY(lE.y), sz, h);
+                            }
+                            // Draw Right Earring only if not hidden behind the head
+                            if (depthDiff > -hideThreshold) {
+                                ctx.drawImage(jewelryImg, mapX(rE.x) - sz/2, mapY(rE.y), sz, h);
+                            }
                         }
                     }
                 }
