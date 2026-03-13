@@ -266,13 +266,17 @@
                         const mcp = pts[13], pip = pts[14];
                         const mX = mapX(mcp.x), mY = mapY(mcp.y), pX = mapX(pip.x), pY = mapY(pip.y);
                         const cX = (mX + pX) / 2, cY = (mY + pY) / 2;
-                        const dist = Math.sqrt(Math.pow(mX-pX,2) + Math.pow(mY-pY,2));
+                        
+                        // Calculate base distance and apply a scale factor to reduce overall size
+                        const baseDist = Math.sqrt(Math.pow(mX-pX,2) + Math.pow(mY-pY,2));
+                        const ringWidth = baseDist * 0.55; // Reduced further from 0.75 to 0.55
+                        const ringHeight = ringWidth * (jewelryImg.height/jewelryImg.width);
                         const angle = Math.atan2(pY - mY, pX - mX);
                         
                         ctx.save();
                         ctx.translate(cX, cY);
                         ctx.rotate(angle + Math.PI/2);
-                        ctx.drawImage(jewelryImg, -dist/2, -dist/2, dist, dist * (jewelryImg.height/jewelryImg.width));
+                        ctx.drawImage(jewelryImg, -ringWidth/2, -ringHeight/2, ringWidth, ringHeight);
                         ctx.restore();
                     });
                 } else {
